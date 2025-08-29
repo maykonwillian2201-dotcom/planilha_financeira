@@ -1,4 +1,6 @@
 <script>
+    console.log("O SCRIPT COMEÇOU A RODAR"); // <--- LINHA DE TESTE 1
+
     // --- Configuração e Helpers ---
     const API_URL = '/api/transactions';
     const STORAGE_SALDO = 'saldo_inicial';
@@ -171,3 +173,118 @@
         document.getElementById('saldo-dia').textContent = formatCurrency(saldoDia);
         const criptoEl = document.getElementById('total-cripto');
         criptoEl.textContent = formatCurrency(criptoLiquido);
+        criptoEl.classList.toggle('positive-value', criptoLiquido >= 0);
+        criptoEl.classList.toggle('negative-value', criptoLiquido < 0);
+    }
+
+    function updateResume() {
+        const despesas = {};
+        const receitas = {};
+        for (const c of Object.keys(categoryLabels)) { despesas[c] = 0; receitas[c] = 0; }
+        for (const t of transactions) {
+            const valor = parseFloat(t.valor);
+            if (t.tipo === 'despesa') despesas[t.categoria] = (despesas[t.categoria] || 0) + valor;
+            else receitas[t.categoria] = (receitas[t.categoria] || 0) + valor;
+        }
+
+        const despesasEl = document.getElementById('resumo-despesas');
+        despesasEl.innerHTML = '';
+        Object.entries(categoryLabels).forEach(([key, label]) => {
+            if (despesas[key] > 0) {
+                const row = document.createElement('div');
+                row.className = 'flex justify-between items-center p-3 bg-gray-50 rounded-md';
+                row.innerHTML = `<span class="text-gray-600">${label}</span><span class="font-medium text-red-600">${formatCurrency(despesas[key] || 0)}</span>`;
+                despesasEl.appendChild(row);
+            }
+        });
+        if (despesasEl.innerHTML === '') despesasEl.innerHTML = `<p class="text-gray-500">Nenhuma despesa registrada.</p>`;
+
+        const receitasEl = document.getElementById('resumo-receitas');
+        receitasEl.innerHTML = '';
+        Object.entries(categoryLabels).forEach(([key, label]) => {
+            if (receitas[key] > 0) {
+                const row = document.createElement('div');
+                row.className = 'flex justify-between items-center p-3 bg-gray-50 rounded-md';
+                row.innerHTML = `<span class="text-gray-600">${label}</span><span class="font-medium text-green-600">${formatCurrency(receitas[key] || 0)}</span>`;
+                receitasEl.appendChild(row);
+            }
+        });
+        if (receitasEl.innerHTML === '') receitasEl.innerHTML = `<p class="text-gray-500">Nenhuma receita registrada.</p>`;
+    }
+    
+    // --- Funções Utilitárias e de Relatórios ---
+    function exportCsv() {
+        if (!transactions.length) return alert('Sem transações para exportar.');
+        const heads = ['id', 'data', 'tipo', 'categoria', 'descricao', 'valor'];
+        const rows = transactions.map(t => [t.id, t.data, t.tipo, t.categoria, `"${(t.descricao || '').replace(/"/g, '""')}"`, t.valor]);
+        const csv = [heads.join(','), ...rows.map(r => r.join(','))].join('\n');
+        const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = 'transactions.csv';
+        a.click();
+    }
+
+    function generateReport() {
+        const date = document.getElementById('report-date').value;
+        if (!date) return alert('Escolha uma data para o relatório.');
+        const items = transactions.filter(t => t.data.startsWith(date));
+        const outputEl = document.getElementById('report-output');
+        if (!items.length) {
+            outputEl.innerHTML = `<div class="p-3 bg-gray-50 rounded-md">Sem lançamentos em ${formatDisplayDate(date)}.</div>`;
+            return;
+        }
+        const entradas = items.filter(t => t.tipo === 'receita').reduce((s, t) => s + parseFloat(t.valor), 0);
+        const saidas = items.filter(t => t.tipo === 'despesa').reduce((s, t) => s + parseFloat(t.valor), 0);
+        const resultado = entradas - saidas;
+        let html = `<div class="p-3 bg-gray-50 rounded-md"><div class="mb-2"><strong>${formatDisplayDate(date)}</strong> — Entradas: <strong class="text-green-600">${formatCurrency(entradas)}</strong>, Saídas: <strong class="text-red-600">${formatCurrency(saidas)}</strong>, Resultado: <strong>${formatCurrency(resultado)}</strong></div>`;
+        html += `<div class="mt-3"><strong>Lançamentos:</strong><ul class="list-disc pl-5">`;
+        for (const it of items.sort((a, b) => new Date(a.created_at) - new Date(b.created_at))) {
+            html += `<li>${escapeHtml(it.descricao)} — ${it.tipo === 'receita' ? '+' : '-'} ${formatCurrency(it.valor)}</li>`;
+        }
+        html += `</ul></div></div>`;
+        outputEl.innerHTML = html;
+    }
+
+    function formatDisplayDate(d) {
+        if (!d) return '';
+        const datePart = d.split('T')[0];
+        const parts = datePart.split('-');
+        if (parts.length !== 3) return d;
+        return parts[2] + '/' + parts[1] + '/' + parts[0];
+    }
+
+    function escapeHtml(text) {
+        if (!text) return '';
+        return text.replace(/[&<>"']/g, m => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[m]));
+    }
+
+    // --- Inicialização ---
+    function init() {
+        console.log("A FUNÇÃO INIT FOI CHAMADA"); // <--- LINHA DE TESTE 2
+
+        // Event Listeners
+        document.getElementById('saldo-inicial').addEventListener('change', e => setInitialBalance(parseFloat(e.target.value) || 0));
+        document.getElementById('btn-receita').addEventListener('click', () => setTipo('receita'));
+        document.getElementById('btn-despesa').addEventListener('click', () => setTipo('despesa'));
+        document.getElementById('transaction-form').addEventListener('submit', e => { e.preventDefault(); addTransaction(); });
+        document.getElementById('filter-today').addEventListener('click', () => loadTransactions('today'));
+        document.getElementById('filter-all').addEventListener('click', () => loadTransactions('all'));
+        document.getElementById('export-csv').addEventListener('click', exportCsv);
+        document.getElementById('generate-report').addEventListener('click', generateReport);
+
+        // Initial state
+        const savedSaldo = parseFloat(localStorage.getItem(STORAGE_SALDO) || '0');
+        document.getElementById('saldo-inicial').value = savedSaldo ? savedSaldo.toFixed(2) : '';
+        document.getElementById('data').valueAsDate = new Date();
+        document.getElementById('report-date').valueAsDate = new Date();
+        setTipo('despesa');
+
+        // First load
+        updateDateHeader();
+        loadTransactions('all');
+        document.getElementById('descricao').focus();
+    }
+
+    document.addEventListener('DOMContentLoaded', init);
+</script>
