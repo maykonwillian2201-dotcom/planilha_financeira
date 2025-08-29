@@ -1,40 +1,74 @@
 <script>
     // --- Configuração e Helpers ---
-    // Removemos a configuração do Supabase e do localStorage para transações
-    const API_URL = '/api/transactions'; // URL da nossa Serverless Function
-
-    // ... (as funções formatCurrency, categoryLabels, etc., continuam as mesmas) ...
+    const API_URL = '/api/transactions';
+    const STORAGE_SALDO = 'saldo_inicial';
+    const formatCurrency = v => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v || 0);
+    const categoryLabels = {
+        alimentacao: 'Alimentação',
+        transporte: 'Transporte',
+        apostas: 'Apostas Esportivas',
+        cassino: 'Cassino',
+        cripto: 'Criptomoedas',
+        pagamento_videos: 'Pagamento por Vídeos',
+        outros: 'Outros'
+    };
 
     let transactions = [];
     let currentTipo = 'despesa';
-    
-    // --- Funções de Dados (Agora usando a API) ---
 
+    // --- Funções de Estado e Dados ---
+    function setInitialBalance(value) {
+        localStorage.setItem(STORAGE_SALDO, value.toString());
+        updateDashboard();
+    }
+
+    // --- Funções de Lógica da UI ---
+    function updateDateHeader() {
+        const now = new Date();
+        const options = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' };
+        document.getElementById('current-date').textContent = now.toLocaleDateString('pt-BR', options);
+    }
+
+    function setTipo(tipo) {
+        currentTipo = tipo;
+        const btnR = document.getElementById('btn-receita');
+        const btnD = document.getElementById('btn-despesa');
+
+        btnR.classList.remove('active', 'bg-green-600', 'text-white');
+        btnD.classList.remove('active', 'bg-red-600', 'text-white');
+
+        if (tipo === 'receita') {
+            btnR.classList.add('active', 'bg-green-600', 'text-white');
+        } else {
+            btnD.classList.add('active', 'bg-red-600', 'text-white');
+        }
+    }
+
+    // --- Funções de Comunicação com a API ---
     async function loadTransactions(filter = 'all') {
         const tbody = document.getElementById('transactions-list');
         tbody.innerHTML = `<tr><td colspan="5" class="text-center py-8 text-gray-500">Carregando...</td></tr>`;
-        
+
         try {
             const response = await fetch(API_URL);
-            if (!response.ok) throw new Error('Erro ao buscar dados');
-            
+            if (!response.ok) throw new Error(`Erro na rede: ${response.statusText}`);
+
             let data = await response.json();
-            
+
             if (filter === 'today') {
                 const today = new Date().toISOString().slice(0, 10);
-                data = data.filter(t => t.data === today);
+                data = data.filter(t => t.data.startsWith(today));
             }
 
             transactions = data;
-            renderTransactions(); // Função separada para renderizar
+            renderTransactions();
         } catch (error) {
-            console.error(error);
-            tbody.innerHTML = `<tr><td colspan="5" class="text-center py-8 text-gray-500">Falha ao carregar transações</td></tr>`;
+            console.error("Falha ao carregar transações:", error);
+            tbody.innerHTML = `<tr><td colspan="5" class="text-center py-8 text-gray-500">Falha ao carregar transações. Verifique o console.</td></tr>`;
         }
     }
 
     async function addTransaction() {
-        // ... (lógica para pegar os valores do formulário continua a mesma) ...
         const descricao = document.getElementById('descricao').value.trim();
         const valor = parseFloat(document.getElementById('valor').value || '0');
         const categoria = document.getElementById('categoria').value;
@@ -55,15 +89,12 @@
 
             if (!response.ok) throw new Error('Erro ao adicionar transação');
 
-            // Recarrega a lista
             loadTransactions('all');
-            
-            // ... (lógica para limpar o formulário continua a mesma) ...
+
             document.getElementById('descricao').value = '';
             document.getElementById('valor').value = '';
             document.getElementById('data').valueAsDate = new Date();
             document.getElementById('descricao').focus();
-
         } catch (error) {
             console.error(error);
             alert('Falha ao adicionar transação.');
@@ -80,29 +111,32 @@
 
             if (!response.ok) throw new Error('Erro ao deletar transação');
 
-            loadTransactions('all'); // Recarrega a lista
+            loadTransactions('all');
         } catch (error) {
             console.error(error);
             alert('Falha ao deletar transação.');
         }
     }
 
-    // --- Funções de Renderização ---
-    // (A lógica de renderizar a tabela, o dashboard e o resumo foi movida para suas próprias funções
-    // para serem chamadas após os dados serem carregados)
-    
+    // --- Funções de Renderização na Tela ---
     function renderTransactions() {
         const tbody = document.getElementById('transactions-list');
         tbody.innerHTML = '';
-        
-        if (transactions.length === 0) {
+
+        let listToRender = transactions.slice().sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+
+        if (listToRender.length === 0) {
             tbody.innerHTML = `<tr><td colspan="5" class="text-center py-8 text-gray-500">Nenhuma transação encontrada</td></tr>`;
         } else {
-            for (const t of transactions) {
-                // ... (a lógica para criar a 'tr' e seu innerHTML é exatamente a mesma de antes) ...
+            for (const t of listToRender) {
                 const tr = document.createElement('tr');
                 tr.className = 'border-b border-gray-200 hover:bg-gray-50';
-                const catClass = { /* ... as classes de categoria ... */ }[t.categoria] || 'bg-gray-100 text-gray-800';
+                const catClass = {
+                    alimentacao: 'bg-yellow-100 text-yellow-800', transporte: 'bg-blue-100 text-blue-800',
+                    apostas: 'bg-purple-100 text-purple-800', cassino: 'bg-red-100 text-red-800',
+                    cripto: 'bg-orange-100 text-orange-800', pagamento_videos: 'bg-green-100 text-green-800',
+                    outros: 'bg-gray-100 text-gray-800'
+                }[t.categoria] || 'bg-gray-100 text-gray-800';
                 const valorHtml = t.tipo === 'receita' ? `<span class="font-medium text-green-600">+ ${formatCurrency(t.valor)}</span>` : `<span class="font-medium text-red-600">- ${formatCurrency(t.valor)}</span>`;
                 tr.innerHTML = `
                     <td class="py-3 text-sm">${formatDisplayDate(t.data)}</td>
@@ -118,18 +152,22 @@
         updateResume();
     }
     
-    // ... (updateDashboard, updateResume, e as outras funções que não mexem com dados continuam iguais) ...
-    // ... (A função init() também precisa ser ajustada para chamar a nova loadTransactions) ...
+    function updateDashboard() {
+        const totalReceitas = transactions.filter(t => t.tipo === 'receita').reduce((s, t) => s + parseFloat(t.valor), 0);
+        const totalGastos = transactions.filter(t => t.tipo === 'despesa').reduce((s, t) => s + parseFloat(t.valor), 0);
+        const saldoInicial = parseFloat(localStorage.getItem(STORAGE_SALDO) || '0') || 0;
+        const saldoCaixa = saldoInicial + (totalReceitas - totalGastos);
+        const today = new Date().toISOString().slice(0, 10);
+        const hojeReceitas = transactions.filter(t => t.tipo === 'receita' && t.data.startsWith(today)).reduce((s, t) => s + parseFloat(t.valor), 0);
+        const hojeGastos = transactions.filter(t => t.tipo === 'despesa' && t.data.startsWith(today)).reduce((s, t) => s + parseFloat(t.valor), 0);
+        const saldoDia = hojeReceitas - hojeGastos;
+        const criptoEntradas = transactions.filter(t => t.categoria === 'cripto' && t.tipo === 'receita').reduce((s, t) => s + parseFloat(t.valor), 0);
+        const criptoSaidas = transactions.filter(t => t.categoria === 'cripto' && t.tipo === 'despesa').reduce((s, t) => s + parseFloat(t.valor), 0);
+        const criptoLiquido = criptoEntradas - criptoSaidas;
 
-    function init() {
-        // ... (todos os event listeners continuam os mesmos) ...
-        document.getElementById('transaction-form').addEventListener('submit', e => { e.preventDefault(); addTransaction(); });
-        
-        // ...
-        
-        loadTransactions('all'); // Primeira carga de dados
-    }
-
-    document.addEventListener('DOMContentLoaded', init);
-
-</script>
+        document.getElementById('total-receitas').textContent = formatCurrency(totalReceitas);
+        document.getElementById('total-gastos').textContent = formatCurrency(totalGastos);
+        document.getElementById('saldo-caixa').textContent = formatCurrency(saldoCaixa);
+        document.getElementById('saldo-dia').textContent = formatCurrency(saldoDia);
+        const criptoEl = document.getElementById('total-cripto');
+        criptoEl.textContent = formatCurrency(criptoLiquido);
