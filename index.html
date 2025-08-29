@@ -1,6 +1,4 @@
 <script>
-    console.log("O SCRIPT COMEÇOU A RODAR"); // <--- LINHA DE TESTE 1
-
     // --- Configuração e Helpers ---
     const API_URL = '/api/transactions';
     const STORAGE_SALDO = 'saldo_inicial';
@@ -256,13 +254,11 @@
 
     function escapeHtml(text) {
         if (!text) return '';
-        return text.replace(/[&<>"']/g, m => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[m]));
+        return text.replace(/[&<>"']/g, m => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#x27;' }[m]));
     }
 
     // --- Inicialização ---
     function init() {
-        console.log("A FUNÇÃO INIT FOI CHAMADA"); // <--- LINHA DE TESTE 2
-
         // Event Listeners
         document.getElementById('saldo-inicial').addEventListener('change', e => setInitialBalance(parseFloat(e.target.value) || 0));
         document.getElementById('btn-receita').addEventListener('click', () => setTipo('receita'));
