@@ -20,10 +20,14 @@ export default async function handler(request, response) {
     }
     // Lógica para adicionar uma nova transação (POST)
     else if (request.method === 'POST') {
-      const { tipo, descricao, valor, categoria, data } = request.body;
-      if (!tipo || !descricao || !valor || !categoria || !data) {
-        return response.status(400).json({ error: 'Todos os campos são obrigatórios' });
+      const { tipo, descricao, categoria, data } = request.body;
+      // Converte o valor para número e faz uma validação mais forte
+      const valor = Number(request.body.valor);
+
+      if (!tipo || !descricao || !categoria || !data || isNaN(valor) || valor <= 0) {
+        return response.status(400).json({ error: 'Dados inválidos ou faltando.' });
       }
+      
       await sql`
         INSERT INTO transactions (tipo, descricao, valor, categoria, data)
         VALUES (${tipo}, ${descricao}, ${valor}, ${categoria}, ${data});
@@ -32,7 +36,7 @@ export default async function handler(request, response) {
     }
     // Lógica para deletar uma transação (DELETE)
     else if (request.method === 'DELETE') {
-        const { id } = request.query; // Pega o ID da URL (?id=123)
+        const { id } = request.query;
         if (!id) {
             return response.status(400).json({ error: 'ID da transação é obrigatório' });
         }
@@ -45,6 +49,7 @@ export default async function handler(request, response) {
     }
   } catch (error) {
     console.error(error);
-    return response.status(500).json({ error: 'Erro no servidor' });
+    // Retorna o erro real do banco de dados para depuração
+    return response.status(500).json({ error: error.message });
   }
 }
