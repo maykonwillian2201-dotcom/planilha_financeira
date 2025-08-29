@@ -1,0 +1,135 @@
+<script>
+    // --- Configuração e Helpers ---
+    // Removemos a configuração do Supabase e do localStorage para transações
+    const API_URL = '/api/transactions'; // URL da nossa Serverless Function
+
+    // ... (as funções formatCurrency, categoryLabels, etc., continuam as mesmas) ...
+
+    let transactions = [];
+    let currentTipo = 'despesa';
+    
+    // --- Funções de Dados (Agora usando a API) ---
+
+    async function loadTransactions(filter = 'all') {
+        const tbody = document.getElementById('transactions-list');
+        tbody.innerHTML = `<tr><td colspan="5" class="text-center py-8 text-gray-500">Carregando...</td></tr>`;
+        
+        try {
+            const response = await fetch(API_URL);
+            if (!response.ok) throw new Error('Erro ao buscar dados');
+            
+            let data = await response.json();
+            
+            if (filter === 'today') {
+                const today = new Date().toISOString().slice(0, 10);
+                data = data.filter(t => t.data === today);
+            }
+
+            transactions = data;
+            renderTransactions(); // Função separada para renderizar
+        } catch (error) {
+            console.error(error);
+            tbody.innerHTML = `<tr><td colspan="5" class="text-center py-8 text-gray-500">Falha ao carregar transações</td></tr>`;
+        }
+    }
+
+    async function addTransaction() {
+        // ... (lógica para pegar os valores do formulário continua a mesma) ...
+        const descricao = document.getElementById('descricao').value.trim();
+        const valor = parseFloat(document.getElementById('valor').value || '0');
+        const categoria = document.getElementById('categoria').value;
+        const data = document.getElementById('data').value;
+
+        if (!descricao || !data || !valor || valor <= 0) {
+            return alert('Preencha todos os campos obrigatórios.');
+        }
+
+        const newTransaction = { tipo: currentTipo, descricao, valor, categoria, data };
+
+        try {
+            const response = await fetch(API_URL, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(newTransaction)
+            });
+
+            if (!response.ok) throw new Error('Erro ao adicionar transação');
+
+            // Recarrega a lista
+            loadTransactions('all');
+            
+            // ... (lógica para limpar o formulário continua a mesma) ...
+            document.getElementById('descricao').value = '';
+            document.getElementById('valor').value = '';
+            document.getElementById('data').valueAsDate = new Date();
+            document.getElementById('descricao').focus();
+
+        } catch (error) {
+            console.error(error);
+            alert('Falha ao adicionar transação.');
+        }
+    }
+
+    async function deleteTransaction(id) {
+        if (!confirm('Excluir transação?')) return;
+
+        try {
+            const response = await fetch(`${API_URL}?id=${id}`, {
+                method: 'DELETE'
+            });
+
+            if (!response.ok) throw new Error('Erro ao deletar transação');
+
+            loadTransactions('all'); // Recarrega a lista
+        } catch (error) {
+            console.error(error);
+            alert('Falha ao deletar transação.');
+        }
+    }
+
+    // --- Funções de Renderização ---
+    // (A lógica de renderizar a tabela, o dashboard e o resumo foi movida para suas próprias funções
+    // para serem chamadas após os dados serem carregados)
+    
+    function renderTransactions() {
+        const tbody = document.getElementById('transactions-list');
+        tbody.innerHTML = '';
+        
+        if (transactions.length === 0) {
+            tbody.innerHTML = `<tr><td colspan="5" class="text-center py-8 text-gray-500">Nenhuma transação encontrada</td></tr>`;
+        } else {
+            for (const t of transactions) {
+                // ... (a lógica para criar a 'tr' e seu innerHTML é exatamente a mesma de antes) ...
+                const tr = document.createElement('tr');
+                tr.className = 'border-b border-gray-200 hover:bg-gray-50';
+                const catClass = { /* ... as classes de categoria ... */ }[t.categoria] || 'bg-gray-100 text-gray-800';
+                const valorHtml = t.tipo === 'receita' ? `<span class="font-medium text-green-600">+ ${formatCurrency(t.valor)}</span>` : `<span class="font-medium text-red-600">- ${formatCurrency(t.valor)}</span>`;
+                tr.innerHTML = `
+                    <td class="py-3 text-sm">${formatDisplayDate(t.data)}</td>
+                    <td class="py-3 text-sm font-medium">${escapeHtml(t.descricao)}</td>
+                    <td class="py-3"><span class="category-badge ${catClass}">${categoryLabels[t.categoria] || t.categoria}</span></td>
+                    <td class="py-3 text-right">${valorHtml}</td>
+                    <td class="py-3 text-right"><button class="text-sm text-red-600 hover:underline" onclick="deleteTransaction(${t.id})">Excluir</button></td>
+                `;
+                tbody.appendChild(tr);
+            }
+        }
+        updateDashboard();
+        updateResume();
+    }
+    
+    // ... (updateDashboard, updateResume, e as outras funções que não mexem com dados continuam iguais) ...
+    // ... (A função init() também precisa ser ajustada para chamar a nova loadTransactions) ...
+
+    function init() {
+        // ... (todos os event listeners continuam os mesmos) ...
+        document.getElementById('transaction-form').addEventListener('submit', e => { e.preventDefault(); addTransaction(); });
+        
+        // ...
+        
+        loadTransactions('all'); // Primeira carga de dados
+    }
+
+    document.addEventListener('DOMContentLoaded', init);
+
+</script>
